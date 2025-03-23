@@ -1,0 +1,4 @@
+/target
+test-script.sh
+p2p-failover.config.yaml
+.p2p-trustkey
