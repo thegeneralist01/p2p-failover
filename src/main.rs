@@ -1,3 +1,4 @@
+use anyhow::Result;
 use p2p_failover::{file_watcher, node::Node, parser::Parser, tcp_listener};
 use std::{
     fs::File,
@@ -6,7 +7,7 @@ use std::{
 };
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     let config_path =
         std::env::var("P2P_CONFIG_PATH").unwrap_or_else(|_| "p2p-failover.config.yaml".to_string());
 
