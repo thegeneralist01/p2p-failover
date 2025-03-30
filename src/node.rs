@@ -1,11 +1,14 @@
 use crate::{config::Config, log, node_connections::NodeConnections, process::Process};
+use futures::future::join_all;
 use std::sync::{Arc, Mutex};
+use tokio::task;
 
+#[derive(Clone)]
 pub struct Node {
     alive: bool,
     pub config: Arc<Mutex<Config>>,
     alives: Vec<bool>,
-    process: Option<Process>,
+    process: Option<Arc<Mutex<Process>>>,
     pub node_connections: NodeConnections,
     // tick: u8,
     // tick_dir: u8,
@@ -28,47 +31,67 @@ impl Node {
 
     /// Returns the amount of alive hosts
     pub async fn check_hosts(&mut self) -> u8 {
-        let mut alives: u8 = 0;
-        let config = self.config.lock().unwrap();
-        for host in config.ddns.iter().enumerate() {
-            if host.1.name == config.config_metadata.name {
+        let config_metadata_name = self.config.lock().unwrap().config_metadata.name.clone();
+        let alives = Arc::new(Mutex::new(0u8));
+        let mut handles = Vec::new();
+
+        for (index, host) in self.config.lock().unwrap().ddns.iter().enumerate() {
+            if host.name == config_metadata_name {
                 continue;
             }
 
-            self.alives[host.0] = false;
+            self.alives[index] = false;
+            let host_clone = host.clone();
+            let alives_clone = Arc::clone(&alives);
+            let mut node_connections = self.node_connections.clone();
 
-            log!(
-                "Checking: {}:{}",
-                if host.1.preference == 0 {
-                    &host.1.ddns
+            let handle = task::spawn(async move {
+                let host_name = host_clone.name.clone();
+                let host_priority = host_clone.priority;
+
+                log!(
+                    "Checking: {}:{}",
+                    if host_clone.preference == 0 {
+                        &host_clone.ddns
+                    } else {
+                        &host_clone.ip
+                    },
+                    &host_clone.port
+                );
+
+                let alive = task::spawn_blocking(move || node_connections.ping(&host_clone))
+                    .await
+                    .unwrap();
+
+                if alive {
+                    log!(
+                        "-> Alive: host \"{}\" with priority {}",
+                        host_name,
+                        host_priority,
+                    );
+                    let mut count = alives_clone.lock().unwrap();
+                    *count += 1;
                 } else {
-                    &host.1.ip
-                },
-                &host.1.port,
-            );
-            let alive = self.node_connections.ping(host.1);
-            if alive {
-                log!(
-                    "-> Alive: host \"{}\" with priority {}",
-                    host.1.name,
-                    host.1.priority
-                );
-                alives += 1;
-            } else {
-                log!(
-                    "-> Host \"{}\" with priority {} is dead",
-                    host.1.name,
-                    host.1.priority
-                );
-            }
-            self.alives[host.0] = alive;
+                    log!(
+                        "-> Host \"{}\" with priority {} is dead",
+                        host_name,
+                        host_priority,
+                    );
+                }
+            });
+
+            handles.push(handle);
         }
+
+        join_all(handles).await;
+
+        let alives = *alives.lock().unwrap();
         alives
     }
 
     fn spawn(&mut self) {
         let process = Process::new(&self.config.lock().unwrap());
-        self.process = Some(process);
+        self.process = Some(Arc::new(Mutex::new(process)));
     }
 
     /// Check for config updates and update
@@ -152,8 +175,11 @@ impl Node {
             {
                 // Clean up
                 self.alive = false;
-                if let Some(ref mut p) = self.process {
-                    p.kill();
+                if let Some(p) = &self.process {
+                    {
+                        let mut process = p.lock().unwrap();
+                        process.kill();
+                    }
                     self.process = None;
                 }
             }

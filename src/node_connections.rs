@@ -46,10 +46,7 @@ impl NodeInfo {
         }
     }
 
-    pub fn update_config(
-        &mut self,
-        config_self_mutex: Arc<Mutex<Config>>,
-    ) -> Result<()> {
+    pub fn update_config(&mut self, config_self_mutex: Arc<Mutex<Config>>) -> Result<()> {
         if let Some(ref mut streamp) = self.streamp {
             let (tx, rx) = mpsc::channel();
             let read_stream = streamp.try_clone().unwrap();
@@ -145,6 +142,7 @@ impl NodeInfo {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct NodeConnections {
     connections: Vec<Arc<Mutex<NodeInfo>>>,
 }
