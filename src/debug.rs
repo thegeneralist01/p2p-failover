@@ -15,7 +15,6 @@ macro_rules! debug {
     ($($arg:tt)*) => {
         if $crate::debug::is_debug_enabled() {
             println!($($arg)*);
-            // println!("DEBUG: {}", format!($($arg)*));
         }
     };
 }

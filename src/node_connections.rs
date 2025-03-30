@@ -26,7 +26,7 @@ pub struct NodeInfo {
     pub target: String,
     pub port: u32,
     pub preference: u8,
-    streamp: Option<TcpStream>,
+    stream: Option<TcpStream>,
 }
 
 impl NodeInfo {
@@ -42,12 +42,12 @@ impl NodeInfo {
             target,
             port,
             preference,
-            streamp,
+            stream: streamp,
         }
     }
 
     pub fn update_config(&mut self, config_self_mutex: Arc<Mutex<Config>>) -> Result<()> {
-        if let Some(ref mut streamp) = self.streamp {
+        if let Some(ref mut streamp) = self.stream {
             let (tx, rx) = mpsc::channel();
             let read_stream = streamp.try_clone().unwrap();
 
@@ -64,14 +64,6 @@ impl NodeInfo {
                         tx.send(String::new()).unwrap_or_default();
                     }
                 }
-                // let mut response = String::new();
-                // for line in reader.lines().map_while(Result::ok) {
-                //     if line == "DONE" {
-                //         break;
-                //     }
-                //     response.push_str(&line);
-                // }
-                // tx.send(response).unwrap_or_default();
             });
 
             streamp.write_all(b"GET CONFIG\n")?;
@@ -141,7 +133,6 @@ impl NodeInfo {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone)]
 pub struct NodeConnections {
     connections: Vec<Arc<Mutex<NodeInfo>>>,
@@ -163,7 +154,7 @@ impl NodeConnections {
     pub fn get_node_connection(&self, node_name: String) -> Option<Arc<Mutex<NodeInfo>>> {
         for connection in &self.connections {
             let conn = connection.lock().unwrap();
-            if conn.target_name == node_name && conn.streamp.is_some() {
+            if conn.target_name == node_name && conn.stream.is_some() {
                 return Some(connection.clone());
             }
         }
@@ -200,12 +191,12 @@ impl NodeConnections {
         let connection = connection.unwrap();
         let connection_guard = connection.lock().unwrap();
 
-        if connection_guard.streamp.is_none() {
+        if connection_guard.stream.is_none() {
             return false;
         }
 
         let mut streamp = connection_guard
-            .streamp
+            .stream
             .as_ref()
             .unwrap()
             .try_clone()
@@ -288,17 +279,16 @@ impl NodeConnections {
     pub fn confirm(&mut self, source: &str, is_ip: bool) -> Option<String> {
         for connection in &self.connections {
             let conn = connection.lock().unwrap();
-            if conn.streamp.is_none() {
+            if conn.stream.is_none() {
                 continue;
             }
 
-            let mut streamp = conn.streamp.as_ref().unwrap();
+            let mut streamp = conn.stream.as_ref().unwrap();
             streamp
                 .write_all(format!("CONFIRM:{}:{}\n", is_ip as u8, source).as_bytes())
                 .unwrap();
 
             let reader = BufReader::new(streamp);
-            // let mut writer = &streamp;
 
             let sis_ip = is_ip.to_string();
 
@@ -348,11 +338,11 @@ impl NodeConnections {
     ) -> Option<ProviderNode> {
         for connection in &self.connections {
             let conn = connection.lock().unwrap();
-            if conn.streamp.is_none() || conn.target_name != target_name {
+            if conn.stream.is_none() || conn.target_name != target_name {
                 continue;
             }
 
-            let mut streamp = conn.streamp.as_ref().unwrap();
+            let mut streamp = conn.stream.as_ref().unwrap();
             streamp.write_all(b"GET CONFIG\n").unwrap();
 
             let reader = BufReader::new(streamp);
@@ -386,11 +376,11 @@ impl NodeConnections {
 
 fn is_connection_alive(connection: Arc<Mutex<NodeInfo>>) -> bool {
     let connection_guard = connection.lock().unwrap();
-    if connection_guard.streamp.is_none() {
+    if connection_guard.stream.is_none() {
         return false;
     }
 
-    let mut streamp = connection_guard.streamp.as_ref().unwrap();
+    let mut streamp = connection_guard.stream.as_ref().unwrap();
     match streamp.write(&[]) {
         Ok(_) => true,
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => true,

@@ -10,8 +10,6 @@ pub struct Node {
     alives: Vec<bool>,
     process: Option<Arc<Mutex<Process>>>,
     pub node_connections: NodeConnections,
-    // tick: u8,
-    // tick_dir: u8,
 }
 
 impl Node {
@@ -24,8 +22,6 @@ impl Node {
             alives,
             process: None,
             node_connections: NodeConnections::new(),
-            // tick: 0,
-            // tick_dir: 1,
         }
     }
 
@@ -94,39 +90,6 @@ impl Node {
         self.process = Some(Arc::new(Mutex::new(process)));
     }
 
-    /// Check for config updates and update
-    #[allow(dead_code)]
-    async fn check_config_diffs(&mut self) -> bool {
-        let c = self.config.lock().unwrap().clone();
-        'outer: for host in c.ddns.iter().enumerate() {
-            if host.1.name == c.config_metadata.name {
-                continue;
-            }
-
-            if !self.alives[host.0] {
-                continue;
-            }
-
-            // Connection
-            let connection_mutex = if let Some(conn) = self
-                .node_connections
-                .get_node_connection(host.1.name.clone())
-            {
-                conn
-            } else if let Some(conn) = self.node_connections.create_node_connection(host.1) {
-                conn
-            } else {
-                // If no connection can be established, continue the outer loop
-                continue 'outer;
-            };
-
-            log!("Checking for config updates");
-            let mut connection = connection_mutex.lock().unwrap();
-            let _ = connection.update_config(self.config.clone());
-        }
-        false
-    }
-
     pub async fn heartbeat(&mut self) {
         log!("\n====> Heartbeat");
 
@@ -185,20 +148,6 @@ impl Node {
             }
         }
 
-        // if alives != 0 && self.tick % 5 == 0 {
-        // self.check_config_diffs().await;
-        // }
-
-        // if self.tick == 0 {
-        //     self.tick_dir = 1;
-        // } else if self.tick == 5 {
-        //     self.tick_dir = 0;
-        // }
-        // if self.tick_dir == 1 {
-        //     self.tick += 1
-        // } else {
-        //     self.tick -= 1
-        // };
         log!("====> Hearbeat end");
     }
 }

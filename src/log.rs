@@ -20,7 +20,6 @@ macro_rules! log {
     ($($arg:tt)*) => {
         if $crate::log::is_verbose_enabled() {
             println!($($arg)*);
-            // println!("LOG: {}", format!($($arg)*));
         }
     };
 }
