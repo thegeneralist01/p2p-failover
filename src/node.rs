@@ -14,7 +14,7 @@ pub struct Node {
 
 impl Node {
     pub fn new(config: Arc<Mutex<Config>>) -> Node {
-        let alives = vec![false; config.lock().unwrap().ddns.len()];
+        let alives = vec![false; config.lock().unwrap().nodes.len()];
 
         Node {
             alive: false,
@@ -31,7 +31,7 @@ impl Node {
         let alives = Arc::new(Mutex::new(0u8));
         let mut handles = Vec::new();
 
-        for (index, host) in self.config.lock().unwrap().ddns.iter().enumerate() {
+        for (index, host) in self.config.lock().unwrap().nodes.iter().enumerate() {
             if host.name == config_metadata_name {
                 continue;
             }
@@ -47,11 +47,7 @@ impl Node {
 
                 log!(
                     "Checking: {}:{}",
-                    if host_clone.preference == 0 {
-                        &host_clone.ddns
-                    } else {
-                        &host_clone.ip
-                    },
+                    &host_clone.ip,
                     &host_clone.port
                 );
 
@@ -101,16 +97,16 @@ impl Node {
             && (alives == 0 || {
                 // There are nodes alive with less priority
                 let config_guard = self.config.lock().unwrap();
-                assert!(config_guard.ddns.len() == self.alives.len());
+                assert!(config_guard.nodes.len() == self.alives.len());
                 let local_priority = config_guard
-                    .ddns
+                    .nodes
                     .iter()
                     .find(|d| d.name == config_guard.config_metadata.name)
                     .map(|d| d.priority)
                     .unwrap_or(0);
 
                 !config_guard
-                    .ddns
+                    .nodes
                     .iter()
                     .zip(self.alives.iter())
                     .any(|(host, &alive)| alive && host.priority > local_priority)
@@ -124,7 +120,7 @@ impl Node {
             // First check configs and then kill or otherwise?
             let config_guard = self.config.lock().unwrap();
             let local_priority = config_guard
-                .ddns
+                .nodes
                 .iter()
                 .find(|d| d.name == config_guard.config_metadata.name)
                 .map(|d| d.priority)
@@ -132,7 +128,7 @@ impl Node {
 
             if self.process.is_some()
                 && config_guard
-                    .ddns
+                    .nodes
                     .iter()
                     .any(|d| d.priority > local_priority)
             {

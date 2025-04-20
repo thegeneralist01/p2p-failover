@@ -5,10 +5,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProviderNode {
     pub name: String,
-    pub ddns: String,
     pub ip: String,
     pub port: u32,
-    pub preference: u8,
     pub priority: u32,
     pub last_updated: Timestamp,
 }
@@ -27,7 +25,7 @@ pub struct ExecutionInstructions {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
-    pub ddns: Vec<ProviderNode>,
+    pub nodes: Vec<ProviderNode>,
     pub config_metadata: ConfigMetadata,
     pub execution: ExecutionInstructions,
 }

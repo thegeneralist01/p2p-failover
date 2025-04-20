@@ -12,7 +12,7 @@ pub fn start_tcp_listener(config: Arc<Mutex<Config>>, config_string: Arc<Mutex<S
         let port = {
             let cfg = config.lock().unwrap();
             let self_name = &cfg.config_metadata.name;
-            cfg.ddns.iter().find(|d| d.name == *self_name).unwrap().port
+            cfg.nodes.iter().find(|d| d.name == *self_name).unwrap().port
         };
 
         let listener = match TcpListener::bind(format!("0.0.0.0:{}", port)) {

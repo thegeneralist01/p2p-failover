@@ -22,10 +22,8 @@ use crate::{
 #[derive(Debug)]
 pub struct NodeInfo {
     pub target_name: String,
-    /// Either the IP or the DDNS
     pub target: String,
     pub port: u32,
-    pub preference: u8,
     stream: Option<TcpStream>,
 }
 
@@ -34,22 +32,20 @@ impl NodeInfo {
         target_name: String,
         target: String,
         port: u32,
-        preference: u8,
-        streamp: Option<TcpStream>,
+        stream: Option<TcpStream>,
     ) -> NodeInfo {
         NodeInfo {
             target_name,
             target,
             port,
-            preference,
-            stream: streamp,
+            stream,
         }
     }
 
     pub fn update_config(&mut self, config_self_mutex: Arc<Mutex<Config>>) -> Result<()> {
-        if let Some(ref mut streamp) = self.stream {
+        if let Some(ref mut stream) = self.stream {
             let (tx, rx) = mpsc::channel();
-            let read_stream = streamp.try_clone().unwrap();
+            let read_stream = stream.try_clone().unwrap();
 
             thread::spawn(move || {
                 let mut reader = BufReader::new(read_stream);
@@ -66,7 +62,7 @@ impl NodeInfo {
                 }
             });
 
-            streamp.write_all(b"GET CONFIG\n")?;
+            stream.write_all(b"GET CONFIG\n")?;
 
             let s = match rx.recv_timeout(Duration::from_secs(2)) {
                 Ok(response) => {
@@ -104,19 +100,19 @@ impl NodeInfo {
             let node_self_name = config_self.config_metadata.name.clone();
 
             // Add new Nodes (that do not exist in our config, but exist in the other config)
-            for ddns in &cfg.ddns {
-                if ddns.name == node_self_name {
+            for node in &cfg.nodes {
+                if node.name == node_self_name {
                     continue;
                 }
-                if !config_self.ddns.iter().any(|d| d.name == ddns.name) {
-                    config_self.ddns.push(ddns.clone());
+                if !config_self.nodes.iter().any(|d| d.name == node.name) {
+                    config_self.nodes.push(node.clone());
                 }
             }
 
             config_self.config_metadata.last_updated = cfg.config_metadata.last_updated.clone();
             // Wondering if we should update the last updated
             config_self
-                .ddns
+                .nodes
                 .iter_mut()
                 .find(|d| d.name == node_self_name)
                 .unwrap()
@@ -128,8 +124,8 @@ impl NodeInfo {
             return Ok(());
         }
 
-        debug!("No streamp for {}", self.target_name);
-        bail!("No streamp");
+        debug!("No stream for {}", self.target_name);
+        bail!("No stream");
     }
 }
 
@@ -165,24 +161,18 @@ impl NodeConnections {
         &self.connections
     }
 
-    pub fn ping(&mut self, ddns: &ProviderNode) -> bool {
-        let target = {
-            if ddns.preference == 0 {
-                ddns.ddns.clone()
-            } else {
-                ddns.ip.clone()
-            }
-        };
+    pub fn ping(&mut self, node: &ProviderNode) -> bool {
+        let target = node.ip.clone();
         let mut connection: Option<Arc<Mutex<NodeInfo>>> =
-            self.get_node_connection(ddns.name.clone());
+            self.get_node_connection(node.name.clone());
 
         if connection.is_none()
             || (connection.is_some() && !is_connection_alive(connection.clone().unwrap()))
         {
             if connection.is_some() {
-                self.remove_node_connection(ddns.name.clone());
+                self.remove_node_connection(node.name.clone());
             }
-            connection = self.create_node_connection(ddns);
+            connection = self.create_node_connection(node);
             if connection.is_none() {
                 return false;
             }
@@ -195,7 +185,7 @@ impl NodeConnections {
             return false;
         }
 
-        let mut streamp = connection_guard
+        let mut stream = connection_guard
             .stream
             .as_ref()
             .unwrap()
@@ -203,7 +193,7 @@ impl NodeConnections {
             .unwrap();
 
         let (tx, rx) = mpsc::channel();
-        let read_stream = streamp.try_clone().unwrap();
+        let read_stream = stream.try_clone().unwrap();
 
         thread::spawn(move || {
             let mut reader = BufReader::new(read_stream);
@@ -221,9 +211,9 @@ impl NodeConnections {
         });
 
         // Write PING
-        let _ = streamp.write_all(b"PING\n");
+        let _ = stream.write_all(b"PING\n");
 
-        let _ = streamp.flush();
+        let _ = stream.flush();
 
         let reply = rx.recv_timeout(Duration::from_secs(2)).unwrap_or_default();
         if reply == -1 {
@@ -233,24 +223,18 @@ impl NodeConnections {
     }
 
     pub fn create_node_connection(&mut self, node: &ProviderNode) -> Option<Arc<Mutex<NodeInfo>>> {
-        // TODO: DDNS
-        let streamp = TcpStream::connect_timeout(
+        let stream = TcpStream::connect_timeout(
             &std::net::SocketAddr::new(node.ip.clone().parse().unwrap(), node.port as u16),
             Duration::from_millis(500),
         );
 
-        match streamp {
-            Ok(streamp) => {
+        match stream {
+            Ok(stream) => {
                 let connection = Arc::new(Mutex::new(NodeInfo::new(
                     node.name.clone(),
-                    if node.preference == 0 {
-                        node.ddns.clone()
-                    } else {
-                        node.ip.clone()
-                    },
+                    node.ip.clone(),
                     node.port,
-                    node.preference,
-                    Some(streamp),
+                    Some(stream),
                 )));
 
                 self.connections.push(connection.clone());
@@ -259,7 +243,7 @@ impl NodeConnections {
 
             Err(error) => {
                 if error.kind() != std::io::ErrorKind::ConnectionRefused {
-                    log!("-> Problem creating the streamp: {:?}", error);
+                    log!("-> Problem creating the stream: {:?}", error);
                 }
                 None
             }
@@ -283,12 +267,12 @@ impl NodeConnections {
                 continue;
             }
 
-            let mut streamp = conn.stream.as_ref().unwrap();
-            streamp
+            let mut stream = conn.stream.as_ref().unwrap();
+            stream
                 .write_all(format!("CONFIRM:{}:{}\n", is_ip as u8, source).as_bytes())
                 .unwrap();
 
-            let reader = BufReader::new(streamp);
+            let reader = BufReader::new(stream);
 
             let sis_ip = is_ip.to_string();
 
@@ -333,7 +317,6 @@ impl NodeConnections {
     pub fn get_config_for(
         &mut self,
         source: &str,
-        is_ip: bool,
         target_name: String,
     ) -> Option<ProviderNode> {
         for connection in &self.connections {
@@ -342,10 +325,10 @@ impl NodeConnections {
                 continue;
             }
 
-            let mut streamp = conn.stream.as_ref().unwrap();
-            streamp.write_all(b"GET CONFIG\n").unwrap();
+            let mut stream = conn.stream.as_ref().unwrap();
+            stream.write_all(b"GET CONFIG\n").unwrap();
 
-            let reader = BufReader::new(streamp);
+            let reader = BufReader::new(stream);
 
             for line in reader.lines() {
                 if line.is_err() {
@@ -358,12 +341,12 @@ impl NodeConnections {
                 let cfg = match parser.parse(None) {
                     Ok(cfg) => cfg,
                     Err(_) => {
-                        streamp.write_all(b"AUTH FAIL: BAD CONFIG\n").unwrap();
+                        stream.write_all(b"AUTH FAIL: BAD CONFIG\n").unwrap();
                         continue;
                     }
                 };
 
-                if let Some(provider) =  cfg.ddns.iter().find(|d| {if is_ip { d.ip.clone()  } else { d.ddns.clone() } } == source) {
+                if let Some(provider) =  cfg.nodes.iter().find(|d| d.ip.clone() == source) {
                     return Some(provider.clone());
                 } else {
                     return None;
@@ -380,8 +363,8 @@ fn is_connection_alive(connection: Arc<Mutex<NodeInfo>>) -> bool {
         return false;
     }
 
-    let mut streamp = connection_guard.stream.as_ref().unwrap();
-    match streamp.write(&[]) {
+    let mut stream = connection_guard.stream.as_ref().unwrap();
+    match stream.write(&[]) {
         Ok(_) => true,
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => true,
         Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => false,

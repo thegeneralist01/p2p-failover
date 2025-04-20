@@ -39,12 +39,10 @@ mod tests {
     #[test]
     fn test_parser() {
         let yaml = r#"
-ddns:
+nodes:
 - name: test
-  ddns: ''
   ip: 127.0.0.1
   port: 8080
-  preference: 1
   priority: 100
   last_updated: 2024-03-20 00:00:00 UTC
 config_metadata:
@@ -59,10 +57,10 @@ execution:
         assert!(result.is_ok());
 
         let config = result.unwrap();
-        assert_eq!(config.ddns.len(), 1);
-        assert_eq!(config.ddns[0].ip, "127.0.0.1");
-        assert_eq!(config.ddns[0].priority, 100);
-        assert_eq!(config.ddns[0].name, "test");
-        assert_eq!(config.ddns[0].name, config.config_metadata.name);
+        assert_eq!(config.nodes.len(), 1);
+        assert_eq!(config.nodes[0].ip, "127.0.0.1");
+        assert_eq!(config.nodes[0].priority, 100);
+        assert_eq!(config.nodes[0].name, "test");
+        assert_eq!(config.nodes[0].name, config.config_metadata.name);
     }
 }

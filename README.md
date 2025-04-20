@@ -27,19 +27,15 @@ cargo build --release
 Create a `p2p-failover.config.yaml` file in your project directory. Here's an example configuration:
 
 ```yaml
-ddns:
+nodes:
 - name: pc
-  ddns: ''
   ip: 127.0.0.1
   port: 8080
-  preference: 1
   priority: 100
   last_updated: 2025-02-04 19:19:18 UTC
 - name: phone
-  ddns: ''
   ip: 100.11.111.111
   port: 8081
-  preference: 1
   priority: 20
   last_updated: 2025-01-09 16:45:00 UTC
 config_metadata:
@@ -52,12 +48,10 @@ execution:
 
 ### Configuration Fields
 
-- `ddns`: List of nodes in the network
+- `nodes`: List of nodes in the network
   - `name`: Unique identifier for the node
-  - `ddns`: Domain name (optional)
   - `ip`: IP address
   - `port`: TCP port for node communication
-  - `preference`: Connection preference (0 for DDNS, 1 for IP)
   - `priority`: Node priority (higher number = higher priority)
   - `last_updated`: Timestamp of last update
 - `config_metadata`: Node-specific metadata
